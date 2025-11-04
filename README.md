@@ -56,41 +56,83 @@ This architecture ensures modularity, scalability, and clear separation of conce
 
 ```mermaid
 graph TD
-%% ===== STYLING =====
-classDef docker fill:#EAF3FF,stroke:#1E56A0,stroke-width:2px,color:#000,font-size:12px
-classDef db fill:#D6EAF8,stroke:#2980B9,stroke-width:2px,color:#000,font-size:12px
-classDef actor fill:#FFF3E0,stroke:#E67E22,stroke-width:2px,color:#000,font-size:12px
+    %% ======================
+    %% 1. Actor
+    %% ======================
+    User_Browser["Utilizator (Browser)"]
 
-%% ===== ACTOR =====
-A[/"End User\n(Client / Admin)"/]:::actor
+    %% ======================
+    %% 2. Docker Host + Containere
+    %% ======================
+    subgraph Docker_Host [Docker Host]
+        direction LR
 
-%% ===== FRONTEND =====
-B[Docker: frontend\nReact + Nginx\nPorts 80:80]:::docker
-A -->|HTTP (80)| T
+        %% --- TRAEFIK ---
+        subgraph traefik_node [Container: traefik]
+            traefik_artifact("Artifact: Traefik v3.0<br/>Reverse Proxy + ForwardAuth")
+            traefik_ports("Ports Host 80:80, 8080:8080")
+        end
 
-%% ===== TRAEFIK =====
-T[Docker: traefik\nReverse Proxy + Auth Forwarding\nPorts 80:80, 8080:8080]:::docker
-T -->|Route / → frontend| B
-T -->|/auth/*| C
-T -->|/users/*| D
-T -->|/devices/*| E
+        %% --- FRONTEND ---
+        subgraph frontend_node [Container: frontend]
+            frontend_artifact("Artifact: React + Nginx<br/>Serves UI + sends API calls")
+            frontend_ports("Exposed via Traefik (Route '/')")
+        end
 
-%% ===== AUTH SERVICE =====
-C[Docker: auth-service\nSpring Boot + Tomcat\nPort 8083]:::docker
-C -->|JDBC (5432)| F
-F[Docker: auth-db\nPostgreSQL\nPort 5432]:::db
+        %% --- AUTH SERVICE ---
+        subgraph auth_node [Container: auth-service]
+            auth_artifact("Artifact: auth-service.jar<br/>Spring Boot + Tomcat")
+            auth_ports("Port Host 8083")
+        end
 
-%% ===== USER SERVICE =====
-D[Docker: user-service\nSpring Boot + Tomcat\nPort 8081]:::docker
-D -->|JDBC (5433)| G
-G[Docker: user-db\nPostgreSQL\nPort 5433]:::db
+        %% --- USER SERVICE ---
+        subgraph user_node [Container: user-service]
+            user_artifact("Artifact: user-service.jar<br/>Spring Boot + Tomcat")
+            user_ports("Port Host 8081")
+        end
 
-%% ===== DEVICE SERVICE =====
-E[Docker: device-service\nSpring Boot + Tomcat\nPort 8082]:::docker
-E -->|JDBC (5434)| H
-H[Docker: device-db\nPostgreSQL\nPort 5434]:::db
+        %% --- DEVICE SERVICE ---
+        subgraph device_node [Container: device-service]
+            device_artifact("Artifact: device-service.jar<br/>Spring Boot + Tomcat")
+            device_ports("Port Host 8082")
+        end
 
-%% ===== INTER-SERVICE COMMUNICATION =====
-C -->|POST /users (register)| D
-D -->|GET /devices/user/{id}| E
-E -->|GET /users/{id}| D
+        %% --- AUTH DATABASE ---
+        subgraph auth_db [Container: auth-db]
+            auth_db_artifact("Artifact: PostgreSQL<br/>Credential Database")
+            auth_db_ports("Port Host 5432")
+        end
+
+        %% --- USER DATABASE ---
+        subgraph user_db [Container: user-db]
+            user_db_artifact("Artifact: PostgreSQL<br/>User Database")
+            user_db_ports("Port Host 5433")
+        end
+
+        %% --- DEVICE DATABASE ---
+        subgraph device_db [Container: device-db]
+            device_db_artifact("Artifact: PostgreSQL<br/>Device Database")
+            device_db_ports("Port Host 5434")
+        end
+    end
+
+    %% ======================
+    %% 3. Conexiuni
+    %% ======================
+
+    %% --- Extern ---
+    User_Browser -- "HTTP (Port 80)" --> traefik_node
+    traefik_node -- "Route '/' → Frontend (React UI)" --> frontend_node
+
+    %% --- Frontend → Servicii prin Traefik ---
+    frontend_node -- "HTTP API Calls (fetch /auth, /users, /devices)" --> traefik_node
+    traefik_node -- "/auth/*" --> auth_node
+    traefik_node -- "/users/*" --> user_node
+    traefik_node -- "/devices/*" --> device_node
+
+    %% --- Servicii → Baze de date ---
+    auth_node -- "JDBC (5432)" --> auth_db
+    user_node -- "JDBC (5433)" --> user_db
+    device_node -- "JDBC (5434)" --> device_db
+
+ 
