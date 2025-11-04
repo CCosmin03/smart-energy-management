@@ -1,0 +1,83 @@
+/* === Background + Layout === */
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-image: url("/bg-login.png"); /* imagine locală */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    height: 100vh;
+    color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* === Login card === */
+.login-card {
+    background-color: rgba(44, 44, 44, 0.85); /* semi-transparent */
+    padding: 40px 30px;
+    border-radius: 16px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    backdrop-filter: blur(4px);
+}
+
+.login-card h2 {
+    margin-bottom: 20px;
+}
+
+.login-card input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    border: none;
+    border-radius: 6px;
+    background-color: #3d3d3d;
+    color: #f0f0f0;
+    font-size: 14px;
+}
+
+.login-card input::placeholder {
+    color: #bbb;
+}
+
+.login-card button {
+    width: 100%;
+    padding: 12px;
+    background-color: #00bcd4;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+.login-card button:hover {
+    background-color: #00acc1;
+}
+
+.error {
+    color: #ff4d4d;
+    margin: 10px 0;
+}
+
+.bottom-text {
+    margin-top: 15px;
+    font-size: 14px;
+    color: #ccc;
+}
+
+.link {
+    color: #00bcd4;
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}

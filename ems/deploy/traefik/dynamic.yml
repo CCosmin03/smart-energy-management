@@ -1,0 +1,55 @@
+http:
+  middlewares:
+    strip-api-prefix:
+      stripPrefix:
+        prefixes: ["/api"]
+
+    auth-forward:
+      forwardAuth:
+        address: "http://auth-service:8083/auth/verify"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "X-User-Id"
+          - "X-User-Role"
+
+  routers:
+    # Public: login/register
+
+    auth-public:
+      rule: "PathPrefix(`/auth/login`) || PathPrefix(`/auth/register`)"
+      entryPoints: ["web"]
+      service: auth-svc
+      # middlewares: ["strip-api-prefix"]
+    verify:
+      rule: "PathPrefix(`/auth/verify`)"
+      entryPoints: [ "web" ]
+      service: auth-svc
+
+    # Protejate: users/devices
+    users:
+      rule: "PathPrefix(`/users`)"
+      entryPoints: ["web"]
+      middlewares: ["auth-forward"]  # , "strip-api-prefix"
+      service: user-svc
+
+    devices:
+      rule: "PathPrefix(`/devices`)"
+      entryPoints: ["web"]
+      middlewares: ["auth-forward"]  # , "strip-api-prefix"
+      service: device-svc
+
+  services:
+    auth-svc:
+      loadBalancer:
+        servers:
+          - url: "http://auth-service:8083"
+
+    user-svc:
+      loadBalancer:
+        servers:
+          - url: "http://user-service:8081"
+
+    device-svc:
+      loadBalancer:
+        servers:
+          - url: "http://device-service:8082"
