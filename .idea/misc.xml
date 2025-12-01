@@ -8,6 +8,8 @@
         <option value="$PROJECT_DIR$/ems/auth-service/pom.xml" />
         <option value="$PROJECT_DIR$/ems/user-service/pom.xml" />
         <option value="$PROJECT_DIR$/ems/device-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/monitoring-service/pom.xml" />
+        <option value="$PROJECT_DIR$/simulator/pom.xml" />
       </list>
     </option>
     <option name="ignoredFiles">

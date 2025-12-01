@@ -13,30 +13,35 @@ http:
           - "X-User-Role"
 
   routers:
-    # Public: login/register
-
+    # Public
     auth-public:
       rule: "PathPrefix(`/auth/login`) || PathPrefix(`/auth/register`)"
-      entryPoints: ["web"]
+      entryPoints: [ "web" ]
       service: auth-svc
-      # middlewares: ["strip-api-prefix"]
+
     verify:
       rule: "PathPrefix(`/auth/verify`)"
       entryPoints: [ "web" ]
       service: auth-svc
 
-    # Protejate: users/devices
+    # Protected
     users:
       rule: "PathPrefix(`/users`)"
-      entryPoints: ["web"]
-      middlewares: ["auth-forward"]  # , "strip-api-prefix"
+      entryPoints: [ "web" ]
+      middlewares: [ "auth-forward" ]
       service: user-svc
 
     devices:
-      rule: "PathPrefix(`/devices`)"
-      entryPoints: ["web"]
-      middlewares: ["auth-forward"]  # , "strip-api-prefix"
+      rule: "PathPrefix(`/devices`) || PathPrefix(`/assignments`)"
+      entryPoints: [ "web" ]
+      middlewares: [ "auth-forward" ]
       service: device-svc
+
+    monitoring:
+      rule: "PathPrefix(`/monitoring`)"
+      entryPoints: [ "web" ]
+      middlewares: [ "auth-forward" ]
+      service: monitoring-svc
 
   services:
     auth-svc:
@@ -53,3 +58,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://device-service:8082"
+
+    monitoring-svc:
+      loadBalancer:
+        servers:
+          - url: "http://monitoring-service:8084"

@@ -1,138 +1,138 @@
-Microservices-Based Energy Management System
+Energy Management System – Part II
+Microservices, RabbitMQ Synchronization, Historical Consumption in the Frontend
 
-This project implements a microservices architecture for managing users, authentication, and IoT devices. The system consists of separate services for authentication, user management, and device management, each running in its own Docker container and connected to a dedicated PostgreSQL database. The frontend is developed in React and communicates with the backend through Traefik, which acts as a reverse proxy and authentication gateway.
+This project represents the second stage of the distributed system designed for managing users, IoT devices, and energy consumption monitoring. The architecture is organized into independent microservices, each with its own PostgreSQL database and communicating through HTTP and RabbitMQ. The frontend is implemented in React and communicates with the backend through Traefik, which acts as both a reverse proxy and an authentication gateway.
 
-The backend is built using Spring Boot 4.0.0-SNAPSHOT, Java 25, and PostgreSQL. Each service exposes a REST API. Traefik handles routing and authentication forwarding between the frontend and backend services.
+The system supports microservice synchronization, real-time processing of energy measurements sent by an external simulator, and visualization of hourly consumption in the client interface.
 
-Services and Ports
+General Architecture
 
-auth-service: handles user registration, login, and JWT verification (port 8083)
+Traefik receives all incoming HTTP requests, validates the JWT token using the ForwardAuth mechanism, and routes the requests to the appropriate internal microservices. Each microservice maintains its own database to ensure data isolation and independent deployment.
 
-user-service: manages user data and CRUD operations (port 8081)
+Internal synchronization is implemented using RabbitMQ with a fanout exchange. The events transmitted are:
 
-device-service: manages IoT devices, assignment and unassignment to users (port 8082)
+USER_CREATED, USER_DELETED – published by user-service and consumed by device-service
 
-traefik: reverse proxy and load balancer (port 80 for HTTP, 8080 for dashboard)
+DEVICE_CREATED, DEVICE_UPDATED, DEVICE_DELETED – published by device-service and consumed by monitoring-service
 
-frontend: React application served through Nginx (port 80)
+MEASUREMENT_CREATED – published by the local simulator and consumed by monitoring-service
 
-PostgreSQL databases for each service (auth_db, user_db, device_db)
+Energy consumption monitoring is performed in monitoring-service, which aggregates the measured values for each hour and stores them efficiently in its database.
 
-Docker containers communicate over a common network called ems. Each microservice connects to its respective database using environment variables defined in the .env file.
+The frontend supports user authentication, listing of devices assigned to the authenticated user, and visualization of daily energy consumption through charts.
 
-How to Run
+Microservices
+auth-service
 
-Build all backend services using Maven: mvn clean package
+Handles user registration, authentication, and JWT generation. Traefik uses the /auth/verify endpoint for token validation.
+Associated database: auth_db
 
-Build Docker images for each service: docker-compose build
+user-service
 
-Start all containers: docker-compose up -d
+Exposes CRUD operations for users and publishes synchronization events to RabbitMQ.
+Associated database: user_db
 
-Access the system:
+device-service
+
+Manages IoT devices, user–device assignment and unassignment, and both publishes and consumes synchronization events.
+Associated database: device_db
+
+monitoring-service
+
+Consumes device and measurement events, aggregates hourly consumption for each device, and exposes endpoints for historical visualization.
+Associated database: monitoring_db
+
+RabbitMQ and Microservice Synchronization
+
+RabbitMQ is used to propagate state changes between microservices. A fanout exchange named sync.exchange is created, and each service has its own dedicated queue:
+
+sync.queue.device – for device-service
+
+sync.queue.monitoring – for monitoring-service
+
+Structural updates are sent as SyncEvent objects serialized using Jackson.
+
+Energy Data Simulator
+
+The simulator runs outside Docker (locally) and periodically sends MEASUREMENT_CREATED events to RabbitMQ. These events are consumed by monitoring-service, which aggregates their values into the hourly_consumption table.
+
+The simulator computes consumption based on the current hour and sends measurements at configurable intervals.
+
+Frontend
+
+The frontend is implemented in React and served through Nginx. Traefik exposes it at the root route (/).
+
+Main functionalities:
+
+authentication and registration
+
+listing of devices assigned to the logged-in user
+
+selecting a day from a calendar
+
+visualizing hourly energy consumption using a bar or line chart
+
+Running the System
+
+Backend build:
+
+mvn clean package
+
+
+Docker image build:
+
+docker-compose build
+
+
+Start containers:
+
+docker-compose up -d
+
+
+Access endpoints:
 
 Frontend: http://localhost
 
 Traefik dashboard: http://localhost:8080
-
-Architecture Overview
-The frontend interacts with Traefik, which forwards requests to the corresponding backend service based on the request path. Authentication is managed through the auth-service, which issues JWT tokens. Traefik uses the /auth/verify endpoint for token validation through forward authentication. Each backend service communicates with its own PostgreSQL container for persistent storage.
-
-Technologies Used
-
-Spring Boot 4.0.0-SNAPSHOT
-
-Java 25
-
-PostgreSQL 18
-
-React
-
-Traefik v3.1
-
-Docker and Docker Compose
-
-
-This architecture ensures modularity, scalability, and clear separation of concerns between authentication, user management, and device management. Each service can be independently maintained and deployed while communicating securely through Traefik.
-
 ```mermaid
-graph TD
-    %% ======================
-    %% 1. Actor
-    %% ======================
-    User_Browser["Utilizator (Browser)"]
+graph TB
+    User["Browser User<br/>(React UI)"]
 
-    %% ======================
-    %% 2. Docker Host + Containere
-    %% ======================
-    subgraph Docker_Host [Docker Host]
-        direction LR
+    Traefik["Traefik v3.1<br/>Reverse Proxy + ForwardAuth<br/>Ports: 80, 8080"]
 
-        %% --- TRAEFIK ---
-        subgraph traefik_node [Container: traefik]
-            traefik_artifact("Artifact: Traefik v3.0<br/>Reverse Proxy + ForwardAuth")
-            traefik_ports("Ports Host 80:80, 8080:8080")
-        end
+    Frontend["Frontend (React + Nginx)<br/>Route: '/'<br/>Exposed via Traefik"]
 
-        %% --- FRONTEND ---
-        subgraph frontend_node [Container: frontend]
-            frontend_artifact("Artifact: React + Nginx<br/>Serves UI + sends API calls")
-            frontend_ports("Exposed via Traefik (Route '/')")
-        end
+    Auth["auth-service<br/>Port 8083<br/>Login/Register/JWT"]
+    UserService["user-service<br/>Port 8081<br/>CRUD Users + Sync Publish"]
+    DeviceService["device-service<br/>Port 8082<br/>CRUD Devices + Assignment + Sync Publish/Consume"]
+    MonitoringService["monitoring-service<br/>Port 8084<br/>Hourly Aggregation + Rabbit Consumer"]
 
-        %% --- AUTH SERVICE ---
-        subgraph auth_node [Container: auth-service]
-            auth_artifact("Artifact: auth-service.jar<br/>Spring Boot + Tomcat")
-            auth_ports("Port Host 8083")
-        end
+    AuthDB["auth-db (PostgreSQL)<br/>Port 5432"]
+    UserDB["user-db (PostgreSQL)<br/>Port 5432"]
+    DeviceDB["device-db (PostgreSQL)<br/>Port 5432"]
+    MonitoringDB["monitoring-db (PostgreSQL)<br/>Port 5432"]
 
-        %% --- USER SERVICE ---
-        subgraph user_node [Container: user-service]
-            user_artifact("Artifact: user-service.jar<br/>Spring Boot + Tomcat")
-            user_ports("Port Host 8081")
-        end
+    Rabbit["RabbitMQ<br/>Ports 5672 / 15672<br/>sync.exchange (fanout)"]
+    Simulator["Simulator (Local)<br/>Sends MEASUREMENT_CREATED"]
 
-        %% --- DEVICE SERVICE ---
-        subgraph device_node [Container: device-service]
-            device_artifact("Artifact: device-service.jar<br/>Spring Boot + Tomcat")
-            device_ports("Port Host 8082")
-        end
+    User -->|"HTTP :80"| Traefik
+    Traefik -->|"Route '/'"| Frontend
 
-        %% --- AUTH DATABASE ---
-        subgraph auth_db [Container: auth-db]
-            auth_db_artifact("Artifact: PostgreSQL<br/>Credential Database")
-            auth_db_ports("Port Host 5432")
-        end
+    Traefik -->|"/auth/*"| Auth
+    Traefik -->|"/users/*"| UserService
+    Traefik -->|"/devices/*"| DeviceService
+    Traefik -->|"/monitoring/*"| MonitoringService
 
-        %% --- USER DATABASE ---
-        subgraph user_db [Container: user-db]
-            user_db_artifact("Artifact: PostgreSQL<br/>User Database")
-            user_db_ports("Port Host 5433")
-        end
+    Auth --> AuthDB
+    UserService --> UserDB
+    DeviceService --> DeviceDB
+    MonitoringService --> MonitoringDB
 
-        %% --- DEVICE DATABASE ---
-        subgraph device_db [Container: device-db]
-            device_db_artifact("Artifact: PostgreSQL<br/>Device Database")
-            device_db_ports("Port Host 5434")
-        end
-    end
+    UserService -->|"Publish: USER_CREATED / USER_DELETED"| Rabbit
+    DeviceService -->|"Publish: DEVICE_CREATED / UPDATED / DELETED"| Rabbit
 
-    %% ======================
-    %% 3. Conexiuni
-    %% ======================
+    Simulator -->|"Publish: MEASUREMENT_CREATED"| Rabbit
 
-    %% --- Extern ---
-    User_Browser -- "HTTP (Port 80)" --> traefik_node
-    traefik_node -- "Route '/' → Frontend (React UI)" --> frontend_node
-
-    %% --- Frontend → Servicii prin Traefik ---
-    frontend_node -- "HTTP API Calls (fetch /auth, /users, /devices)" --> traefik_node
-    traefik_node -- "/auth/*" --> auth_node
-    traefik_node -- "/users/*" --> user_node
-    traefik_node -- "/devices/*" --> device_node
-
-    %% --- Servicii → Baze de date ---
-    auth_node -- "JDBC (5432)" --> auth_db
-    user_node -- "JDBC (5433)" --> user_db
-    device_node -- "JDBC (5434)" --> device_db
-
- 
+    Rabbit -->|"Consume: USER_*"| DeviceService
+    Rabbit -->|"Consume: DEVICE_*"| MonitoringService
+    Rabbit -->|"Consume: MEASUREMENT_CREATED"| MonitoringService

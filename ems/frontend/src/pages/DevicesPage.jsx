@@ -2,44 +2,55 @@ import { useEffect, useState } from "react";
 
 function DevicesPage() {
     const [devices, setDevices] = useState([]);
-    const [form, setForm] = useState({ name: "", status: "OFFLINE" });
+    const [assignments, setAssignments] = useState([]);
+    const [form, setForm] = useState({ name: "", status: "OFFLINE", maxConsumption: 0 });
     const [editingId, setEditingId] = useState(null);
-    const [assignUsername, setAssignUsername] = useState("");
+    const [assignUserId, setAssignUserId] = useState("");
 
     const token = localStorage.getItem("token");
     const payload = JSON.parse(atob(token.split(".")[1]));
     const role = payload.role;
 
-    const findUserByName = async (username) => {
-        const res = await fetch(`http://localhost/users`, {
-            headers: {
-                "X-User-Role": role,
-                "Authorization": `Bearer ${token}`,
-            },
-        });
-        const users = await res.json();
+    const API = "http://localhost";
 
-        const found = users.find(
-            u => u.name.toLowerCase().trim() === username.toLowerCase().trim()
-        );
-
-        return found ? found.id : null;
-    };
-
-
+    // === Fetch all devices ===
     const fetchDevices = async () => {
-        const res = await fetch("http://localhost/devices", {
+        const res = await fetch(`${API}/devices`, {
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
-        if (res.ok) setDevices(await res.json());
+        if (res.ok) {
+            setDevices(await res.json());
+        }
     };
 
-    useEffect(() => { fetchDevices(); }, []);
+    // === Fetch all assignments ===
+    const fetchAssignments = async () => {
+        const res = await fetch(`${API}/assignments`, {
+            headers: { "Authorization": `Bearer ${token}` },
+        });
+        if (res.ok) {
+            setAssignments(await res.json());
+        }
+    };
 
+    useEffect(() => {
+        fetchDevices();
+        fetchAssignments();
+    }, []);
+
+    // === CREATE / UPDATE DEVICE ===
     const handleSubmit = async (e) => {
         e.preventDefault();
         const method = editingId ? "PUT" : "POST";
-        const url = editingId ? `http://localhost/devices/${editingId}` : "http://localhost/devices";
+        const url = editingId
+            ? `${API}/devices/${editingId}`
+            : `${API}/devices`;
+
+        const payload = {
+            name: form.name,
+            status: form.status,
+            maxConsumption: Number(form.maxConsumption)
+        };
 
         const res = await fetch(url, {
             method,
@@ -48,108 +59,142 @@ function DevicesPage() {
                 "X-User-Role": role,
                 "Authorization": `Bearer ${token}`,
             },
-            body: JSON.stringify(form),
+            body: JSON.stringify(payload),
         });
 
         if (res.ok) {
-            setForm({ name: "", status: "OFFLINE" });
+            setForm({ name: "", status: "OFFLINE", maxConsumption: 0 });
             setEditingId(null);
             fetchDevices();
         }
     };
 
+    // === DELETE DEVICE ===
     const handleDelete = async (id) => {
         if (!window.confirm("Delete this device?")) return;
-        const res = await fetch(`http://localhost/devices/${id}`, {
+        const res = await fetch(`${API}/devices/${id}`, {
             method: "DELETE",
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
-        if (res.ok) fetchDevices();
+        if (res.ok) {
+            fetchDevices();
+            fetchAssignments();
+        }
     };
 
-    const handleAssign = async (id) => {
-        if (!assignUsername.trim()) {
-            alert("Please enter a username before assigning!");
+    // === ASSIGN (BY userId) ===
+    const handleAssign = async (deviceId) => {
+        if (!assignUserId.trim()) {
+            alert("Please enter a userId!");
             return;
         }
 
-        const realUserId = await findUserByName(assignUsername);
-        if (!realUserId) return alert("User not found!");
-
-        const res = await fetch(`http://localhost/devices/${id}/assign`, {
+        const res = await fetch(`${API}/assignments`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-User-Role": role,
                 "Authorization": `Bearer ${token}`,
             },
-            body: JSON.stringify({ userId: realUserId }),
+            body: JSON.stringify({
+                userId: assignUserId,
+                deviceId: deviceId,
+            }),
         });
 
         if (res.ok) {
-            alert("Device assigned successfully!");
-            setAssignUsername("");
-            fetchDevices();
+            alert("Device assigned!");
+            setAssignUserId("");
+            fetchAssignments();
         } else {
             alert("Failed to assign device.");
         }
     };
 
+    // === UNASSIGN ===
+    const handleUnassign = async (deviceId) => {
+        const res = await fetch(`${API}/assignments/${deviceId}`, {
+            method: "DELETE",
+            headers: { "Authorization": `Bearer ${token}` },
+        });
 
-
-
-    const handleUnassign = async (id) => {
-        try {
-            const res = await fetch(`http://localhost/devices/${id}/unassign`, {
-                method: "POST",
-                headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
-            });
-            if (!res.ok) throw new Error("Unassign failed");
-            alert("Device unassigned successfully!");
-            fetchDevices();
-        } catch (err) {
-            alert("Unassign failed: " + err.message);
+        if (res.ok) {
+            alert("Device unassigned!");
+            fetchAssignments();
+        } else {
+            alert("Failed to unassign.");
         }
+    };
+
+    // === HELPER: get userId for a device ===
+    const getUserForDevice = (deviceId) => {
+        const a = assignments.find(a => a.deviceId === deviceId);
+        return a ? a.userId : "Unassigned";
     };
 
     const handleEdit = (device) => {
         setEditingId(device.id);
-        setForm({ name: device.name, status: device.status });
+        setForm({ name: device.name, status: device.status, maxConsumption: device.maxConsumption ?? 0 });
     };
 
     return (
         <div className="table-container">
             <h2>Devices Management</h2>
 
+            {/* CRUD FORM */}
             <form className="crud-form" onSubmit={handleSubmit}>
-                <input type="text" placeholder="Device Name" value={form.name}
-                       onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <input
+                    type="text"
+                    placeholder="Device Name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required
+                />
+
+                <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
                     <option value="ONLINE">ONLINE</option>
                     <option value="OFFLINE">OFFLINE</option>
                 </select>
 
+                <input
+                    type="number"
+                    placeholder="Max Consumption (W)"
+                    value={form.maxConsumption}
+                    onChange={(e) => setForm({ ...form, maxConsumption: e.target.value })}
+                />
+
                 <button type="submit">{editingId ? "Update" : "Create"}</button>
+
                 {editingId && (
-                    <button type="button" onClick={() => { setEditingId(null); setForm({ name: "", status: "OFFLINE" }); }}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEditingId(null);
+                            setForm({ name: "", status: "OFFLINE", maxConsumption: 0 });
+                        }}
+                    >
                         Cancel
                     </button>
                 )}
             </form>
 
+            {/* ASSIGN INPUT */}
             <div className="assign-container">
                 <input
                     type="text"
-                    placeholder="Enter username to assign"
-                    value={assignUsername}
-                    onChange={(e) => setAssignUsername(e.target.value)}
+                    placeholder="Enter userId to assign"
+                    value={assignUserId}
+                    onChange={(e) => setAssignUserId(e.target.value)}
                 />
             </div>
 
+            {/* DEVICES TABLE */}
             <table>
                 <thead>
                 <tr>
-                    <th>ID</th><th>Name</th><th>Status</th><th>User ID</th><th>Actions</th>
+                    <th>ID</th><th>Name</th><th>Status</th><th>Max Consumption (W)</th><th>User ID</th><th>Actions</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -158,7 +203,8 @@ function DevicesPage() {
                         <td>{d.id}</td>
                         <td>{d.name}</td>
                         <td>{d.status}</td>
-                        <td>{d.userId || "Unassigned"}</td>
+                        <td>{d.maxConsumption}</td>
+                        <td>{getUserForDevice(d.id)}</td>
                         <td>
                             <button onClick={() => handleEdit(d)}>Edit</button>
                             <button className="danger" onClick={() => handleDelete(d.id)}>Delete</button>

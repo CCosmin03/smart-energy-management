@@ -9,7 +9,12 @@ public class DeviceBuilder {
     private DeviceBuilder() {}
 
     public static DeviceDTO toDeviceDTO(Device device) {
-        return new DeviceDTO(device.getId(), device.getName(), device.getStatus(), device.getUserId());
+        return new DeviceDTO(
+                device.getId(),
+                device.getName(),
+                device.getStatus(),
+                device.getMaxConsumption()
+        );
     }
 
     public static DeviceDetailsDTO toDeviceDetailsDTO(Device device) {
@@ -17,11 +22,15 @@ public class DeviceBuilder {
                 device.getId(),
                 device.getName(),
                 device.getStatus(),
-                device.getUserId()
+                device.getMaxConsumption()
         );
     }
 
     public static Device toEntity(DeviceDetailsDTO dto) {
-        return new Device(dto.getName(), dto.getStatus(), dto.getUserId());
+        return new Device(
+                dto.getName(),
+                dto.getStatus(),
+                dto.getMaxConsumption()
+        );
     }
 }

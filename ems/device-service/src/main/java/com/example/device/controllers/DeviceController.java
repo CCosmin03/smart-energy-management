@@ -10,7 +10,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -23,7 +22,7 @@ public class DeviceController {
         this.service = service;
     }
 
-    // === GET ALL DEVICES - only ADMIN ===
+    // === GET ALL DEVICES (ADMIN) ===
     @GetMapping
     public List<DeviceDTO> getDevices(@RequestHeader("X-User-Role") String role) {
         if (!"ADMIN".equalsIgnoreCase(role)) {
@@ -32,33 +31,40 @@ public class DeviceController {
         return service.findDevices();
     }
 
-    // === GET DEVICE BY ID - only ADMIN or device owner ===
+    // === NEW: DEVICES FOR A SPECIFIC USER (CLIENT DASHBOARD) ===
+    @GetMapping("/user/{userId}")
+    public List<DeviceDTO> getDevicesForUser(@PathVariable UUID userId,
+                                             @RequestHeader("X-User-Id") String headerUserId,
+                                             @RequestHeader("X-User-Role") String role) {
+
+        // daca e CLIENT, poate vedea DOAR propriile device-uri
+        if ("CLIENT".equalsIgnoreCase(role)) {
+            UUID currentUser = UUID.fromString(headerUserId);
+            if (!currentUser.equals(userId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Clients can only see their own devices.");
+            }
+        } else if (!"ADMIN".equalsIgnoreCase(role)
+                && !"EMPLOYEE".equalsIgnoreCase(role)
+                && !"MANAGER".equalsIgnoreCase(role)) {
+            // orice alt rol necunoscut este blocat
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Role not allowed to access this endpoint.");
+        }
+
+        return service.findDevicesForUser(userId);
+    }
+
+    // === GET ONE DEVICE (ADMIN ONLY) ===
     @GetMapping("/{id}")
     public DeviceDetailsDTO getDevice(@PathVariable UUID id,
-                                      @RequestHeader("X-User-Id") String callerId,
                                       @RequestHeader("X-User-Role") String role) {
-        DeviceDetailsDTO dto = service.findDeviceById(id);
-
-        if ("ADMIN".equalsIgnoreCase(role) || (dto.getUserId() != null && dto.getUserId().toString().equals(callerId))) {
-            return dto;
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admins can access this endpoint.");
         }
 
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to device.");
+        return service.findDeviceById(id);
     }
 
-    // === GET DEVICES BY USER ===
-    @GetMapping("/user/{userId}")
-    public List<DeviceDTO> byUser(@PathVariable UUID userId,
-                                  @RequestHeader("X-User-Id") String callerId,
-                                  @RequestHeader("X-User-Role") String role) {
-        if (!"ADMIN".equalsIgnoreCase(role) && !callerId.equals(userId.toString())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to user devices.");
-        }
-
-        return service.findByUser(userId);
-    }
-
-    // === CREATE DEVICE - only ADMIN ===
+    // === CREATE DEVICE ===
     @PostMapping
     public ResponseEntity<Void> create(@RequestBody DeviceDetailsDTO dto,
                                        @RequestHeader("X-User-Role") String role) {
@@ -70,7 +76,7 @@ public class DeviceController {
         return ResponseEntity.created(URI.create("/devices/" + id)).build();
     }
 
-    // === UPDATE DEVICE - only ADMIN ===
+    // === UPDATE DEVICE ===
     @PutMapping("/{id}")
     public DeviceDetailsDTO update(@PathVariable UUID id,
                                    @RequestBody DeviceDetailsDTO dto,
@@ -82,7 +88,7 @@ public class DeviceController {
         return service.updateDevice(id, dto);
     }
 
-    // === DELETE DEVICE - only ADMIN ===
+    // === DELETE DEVICE ===
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id,
                                        @RequestHeader("X-User-Role") String role) {
@@ -92,29 +98,5 @@ public class DeviceController {
 
         service.deleteDevice(id);
         return ResponseEntity.noContent().build();
-    }
-
-    // === ASSIGN DEVICE - only ADMIN ===
-    @PostMapping("/{id}/assign")
-    public DeviceDetailsDTO assign(@PathVariable UUID id,
-                                   @RequestBody Map<String, String> body,
-                                   @RequestHeader("X-User-Role") String role) {
-        if (!"ADMIN".equalsIgnoreCase(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admins can assign devices.");
-        }
-
-        UUID userId = UUID.fromString(body.get("userId"));
-        return service.assignToUser(id, userId);
-    }
-
-    // === UNASSIGN DEVICE - only ADMIN ===
-    @PostMapping("/{id}/unassign")
-    public DeviceDetailsDTO unassign(@PathVariable UUID id,
-                                     @RequestHeader("X-User-Role") String role) {
-        if (!"ADMIN".equalsIgnoreCase(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admins can unassign devices.");
-        }
-
-        return service.unassign(id);
     }
 }

@@ -28,15 +28,17 @@ public class Device implements Serializable {
     @Column(name = "status", nullable = false)
     private String status;
 
-    @Column(name = "user_id")
-    private UUID userId;
+    // NO MORE userId — now stored in device_assignment!
+
+    @Column(name = "max_consumption")
+    private Double maxConsumption;
 
     public Device() {}
 
-    public Device(String name, String status, UUID userId) {
+    public Device(String name, String status, Double maxConsumption) {
         this.name = name;
         this.status = status;
-        this.userId = userId;
+        this.maxConsumption = maxConsumption;
     }
 
     public UUID getId() {
@@ -63,11 +65,11 @@ public class Device implements Serializable {
         this.status = status;
     }
 
-    public UUID getUserId() {
-        return userId;
+    public Double getMaxConsumption() {
+        return maxConsumption;
     }
 
-    public void setUserId(UUID userId) {
-        this.userId = userId;
+    public void setMaxConsumption(Double maxConsumption) {
+        this.maxConsumption = maxConsumption;
     }
 }

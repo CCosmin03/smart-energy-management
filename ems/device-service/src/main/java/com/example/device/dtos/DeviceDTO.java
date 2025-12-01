@@ -8,15 +8,15 @@ public class DeviceDTO {
     private UUID id;
     private String name;
     private String status;
-    private UUID userId; // <--- ADĂUGAT
+    private Double maxConsumption;
 
     public DeviceDTO() {}
 
-    public DeviceDTO(UUID id, String name, String status, UUID userId) {
+    public DeviceDTO(UUID id, String name, String status, Double maxConsumption) {
         this.id = id;
         this.name = name;
         this.status = status;
-        this.userId = userId;
+        this.maxConsumption = maxConsumption;
     }
 
     public UUID getId() { return id; }
@@ -28,14 +28,20 @@ public class DeviceDTO {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
+    public Double getMaxConsumption() {
+        return maxConsumption;
+    }
+
+    public void setMaxConsumption(Double maxConsumption) {
+        this.maxConsumption = maxConsumption;
+    }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof DeviceDTO that)) return false;
-        return Objects.equals(name, that.name) && Objects.equals(status, that.status);
+        return Objects.equals(name, that.name) &&
+                Objects.equals(status, that.status);
     }
 
     @Override

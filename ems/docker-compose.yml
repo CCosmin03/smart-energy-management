@@ -12,61 +12,89 @@ services:
     ports:
       - "80:80"
       - "8080:8080"
-    depends_on:
-      - auth-service
-      - user-service
-      - device-service
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./deploy/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-    networks: [ ems ]
+    networks: [ems]
 
-  # === Databases ===
   auth-db:
     image: postgres:18
     container_name: auth-db
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
     volumes:
-      - auth_pgdata:/var/lib/postgresql/data
-    networks: [ ems ]
+      - auth_pgdata:/var/lib/postgresql
+    networks: [ems]
 
   user-db:
     image: postgres:18
     container_name: user-db
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: user_db
+    ports:
+      - "5434:5432"
     volumes:
-      - user_pgdata:/var/lib/postgresql/data
-    networks: [ ems ]
+      - user_pgdata:/var/lib/postgresql
+    networks: [ems]
 
   device-db:
     image: postgres:18
     container_name: device-db
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: device_db
+    ports:
+      - "5435:5432"
     volumes:
-      - device_pgdata:/var/lib/postgresql/data
-    networks: [ ems ]
+      - device_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  monitoring-db:
+    image: postgres:18
+    container_name: monitoring-db
+    env_file: [ ./.env ]
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: monitoring_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - monitoring_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [ems]
 
   auth-service:
     build: ./auth-service
     container_name: auth-service
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       PORT: ${AUTH_PORT:-8083}
       DB_IP: auth-db
@@ -77,16 +105,17 @@ services:
       APP_JWT_SECRET: ${APP_JWT_SECRET}
       APP_JWT_EXPIRATION: ${APP_JWT_EXPIRATION}
       JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
-    depends_on: [ auth-db ]
+    depends_on:
+      auth-db:
+        condition: service_started
     expose:
-      - "${AUTH_PORT:-8083}"
-    networks: [ ems ]
+      - "8083"
+    networks: [ems]
 
   user-service:
     build: ./user-service
     container_name: user-service
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       PORT: ${USER_PORT:-8081}
       DB_IP: user-db
@@ -95,17 +124,22 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DBNAME: user_db
       APP_JWT_SECRET: ${APP_JWT_SECRET}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
       JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
-    depends_on: [ user-db ]
+    depends_on:
+      user-db: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
     expose:
-      - "${USER_PORT:-8081}"
-    networks: [ ems ]
+      - "8081"
+    networks: [ems]
 
   device-service:
     build: ./device-service
     container_name: device-service
-    env_file:
-      - ./.env
+    env_file: [ ./.env ]
     environment:
       PORT: ${DEVICE_PORT:-8082}
       DB_IP: device-db
@@ -113,24 +147,51 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DBNAME: device_db
-      APP_JWT_SECRET: ${APP_JWT_SECRET}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
       JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
-    depends_on: [ device-db ]
+    depends_on:
+      device-db: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
     expose:
-      - "${DEVICE_PORT:-8082}"
-    networks: [ ems ]
+      - "8082"
+    networks: [ems]
+
+  monitoring-service:
+    build: ./monitoring-service
+    container_name: monitoring-service
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    depends_on:
+      monitoring-db: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+    expose:
+      - "8084"
+    networks: [ems]
 
   frontend:
     build: ./frontend
     container_name: frontend
-    depends_on:
-      - traefik
+    depends_on: [ traefik ]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`localhost`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
-    networks: [ ems ]
+    networks: [ems]
 
 networks:
   ems:
@@ -139,3 +200,4 @@ volumes:
   auth_pgdata:
   user_pgdata:
   device_pgdata:
+  monitoring_pgdata:

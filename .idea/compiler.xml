@@ -6,8 +6,10 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
+        <module name="monitoring-service" />
         <module name="auth-service" />
         <module name="user-service" />
+        <module name="simulator" />
         <module name="device-service" />
       </profile>
     </annotationProcessing>
@@ -20,6 +22,8 @@
       <module name="api-service" options="-parameters" />
       <module name="auth-service" options="-parameters" />
       <module name="device-service" options="-parameters" />
+      <module name="monitoring-service" options="-parameters" />
+      <module name="simulator" options="-parameters" />
       <module name="user-service" options="-parameters" />
     </option>
   </component>
