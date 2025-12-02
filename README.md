@@ -94,45 +94,76 @@ Access endpoints:
 Frontend: http://localhost
 
 Traefik dashboard: http://localhost:8080
+
 ```mermaid
-graph TB
-    User["Browser User<br/>(React UI)"]
 
-    Traefik["Traefik v3.1<br/>Reverse Proxy + ForwardAuth<br/>Ports: 80, 8080"]
+%%{init: {'themeVariables': { 'fontSize': '14px', 'fontFamily': 'arial'}, 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 50}}}%%
+graph LR
+    %% --- 1. External Actors ---
+    subgraph External [External Actors]
+        direction TB
+        User_Browser["User (Browser UI)"]
+        Simulator_App["Device Data Simulator<br>(Local App)<br/>Publishes at amqp://localhost:5672"]
+    end
 
-    Frontend["Frontend (React + Nginx)<br/>Route: '/'<br/>Exposed via Traefik"]
+    %% --- 2. Docker Host Environment ---
+    subgraph DockerHost [Docker Host Environment]
+        
+        %% Infrastructure Layer
+        subgraph infra_layer [Infrastructure & Routing Layer]
+            direction TB
+            traefik_node("Traefik Gateway<br/>HTTP Port: 80<br/>Dashboard: 8080")
+            frontend_node("Frontend (Nginx)<br/>Exposed via Traefik '/'<br/>Container Port: 80")
+            rabbitmq_node("RabbitMQ Broker<br/>AMQP: 5672<br/>Management UI: 15672")
+        end
 
-    Auth["auth-service<br/>Port 8083<br/>Login/Register/JWT"]
-    UserService["user-service<br/>Port 8081<br/>CRUD Users + Sync Publish"]
-    DeviceService["device-service<br/>Port 8082<br/>CRUD Devices + Assignment + Sync Publish/Consume"]
-    MonitoringService["monitoring-service<br/>Port 8084<br/>Hourly Aggregation + Rabbit Consumer"]
+        %% Backend Microservices
+        subgraph backend_layer [Backend Microservices]
+            direction TB
+            auth_node("Auth Service<br/>HTTP Port: 8083")
+            user_node("User Service<br/>HTTP Port: 8081")
+            device_node("Device Service<br/>HTTP Port: 8082")
+            monitoring_node("Monitoring Service<br/>HTTP Port: 8084")
+        end
 
-    AuthDB["auth-db (PostgreSQL)<br/>Port 5432"]
-    UserDB["user-db (PostgreSQL)<br/>Port 5432"]
-    DeviceDB["device-db (PostgreSQL)<br/>Port 5432"]
-    MonitoringDB["monitoring-db (PostgreSQL)<br/>Port 5432"]
+        %% Database Layer
+        subgraph data_layer [Database Layer]
+            direction TB
+            auth_db[("Auth DB (PostgreSQL)<br/>Port: 5432")]
+            user_db[("User DB (PostgreSQL)<br/>Port: 5432")]
+            device_db[("Device DB (PostgreSQL)<br/>Port: 5432")]
+            monitoring_db[("Monitoring DB (PostgreSQL)<br/>Port: 5432")]
+        end
+    end
 
-    Rabbit["RabbitMQ<br/>Ports 5672 / 15672<br/>sync.exchange (fanout)"]
-    Simulator["Simulator (Local)<br/>Sends MEASUREMENT_CREATED"]
+    %% ============= CONNECTIONS =============
 
-    User -->|"HTTP :80"| Traefik
-    Traefik -->|"Route '/'"| Frontend
+    %% --- HTTP Routing (Traefik) ---
+    User_Browser ===> |"HTTP :80"| traefik_node
+    traefik_node --> |"Route '/' → Frontend"| frontend_node
 
-    Traefik -->|"/auth/*"| Auth
-    Traefik -->|"/users/*"| UserService
-    Traefik -->|"/devices/*"| DeviceService
-    Traefik -->|"/monitoring/*"| MonitoringService
+    traefik_node --> |"Route /api/auth → 8083"| auth_node
+    traefik_node --> |"Route /api/users → 8081"| user_node
+    traefik_node --> |"Route /api/devices → 8082"| device_node
+    traefik_node --> |"Route /api/monitoring → 8084"| monitoring_node
 
-    Auth --> AuthDB
-    UserService --> UserDB
-    DeviceService --> DeviceDB
-    MonitoringService --> MonitoringDB
+    %% --- Database Connections ---
+    auth_node --> |"JDBC 5432"| auth_db
+    user_node --> |"JDBC 5432"| user_db
+    device_node --> |"JDBC 5432"| device_db
+    monitoring_node --> |"JDBC 5432"| monitoring_db
 
-    UserService -->|"Publish: USER_CREATED / USER_DELETED"| Rabbit
-    DeviceService -->|"Publish: DEVICE_CREATED / UPDATED / DELETED"| Rabbit
+    %% --- RabbitMQ Async Flows ---
+    Simulator_App -.-> |"AMQP Publish :5672<br/>MEASUREMENT_CREATED"| rabbitmq_node
+    rabbitmq_node -.-> |"Consume :5672<br/>MEASUREMENT_CREATED"| monitoring_node
 
-    Simulator -->|"Publish: MEASUREMENT_CREATED"| Rabbit
+    user_node -.-> |"Publish USER_CREATED / USER_DELETED"| rabbitmq_node
+    device_node -.-> |"Publish DEVICE_CREATED / UPDATED / DELETED"| rabbitmq_node
 
-    Rabbit -->|"Consume: USER_*"| DeviceService
-    Rabbit -->|"Consume: DEVICE_*"| MonitoringService
-    Rabbit -->|"Consume: MEASUREMENT_CREATED"| MonitoringService
+    rabbitmq_node -.-> |"Consume USER_*"| device_node
+    rabbitmq_node -.-> |"Consume DEVICE_*"| monitoring_node
+
+    %% Styling
+    classDef container fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    class DockerHost container;
+    linkStyle default stroke-width:2px,fill:none,stroke:black;
