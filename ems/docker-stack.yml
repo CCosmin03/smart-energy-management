@@ -1,0 +1,371 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.1
+    ports:
+      - "80:80"
+      - "8080:8080"
+    command:
+      - "--providers.swarm=true"
+      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+      - "--providers.swarm.exposedbydefault=false"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--api.dashboard=true"
+      - "--entrypoints.web.address=:80"
+      - "--log.level=INFO"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./deploy/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - ems
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  auth-db:
+    image: postgres:18
+    env_file: [ ./.env ]
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  user-db:
+    image: postgres:18
+    env_file: [ ./.env ]
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      POSTGRES_DB: user_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - user_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  device-db:
+    image: postgres:18
+    env_file: [ ./.env ]
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      POSTGRES_DB: device_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - device_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  monitoring-db:
+    image: postgres:18
+    env_file: [ ./.env ]
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      POSTGRES_DB: monitoring_db
+    ports:
+      - "5436:5432"
+    command: ["postgres", "-c", "max_connections=300"]
+    volumes:
+      - monitoring_pgdata:/var/lib/postgresql
+    networks: [ems]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [ems]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    env_file: [ ./.env ]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [ems]
+
+  auth-service:
+    image: auth-service:latest
+    build: ./auth-service
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${AUTH_PORT:-8083}
+      DB_IP: auth-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: auth_db
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-5GydVNDykHckescoG9UdVrprZZ2cIdQWHbIl6A6TWSrDTX9/mllSQP6rEsNBAOyGMRcPRL7ePBjZNvqOwNQiTg}
+      APP_JWT_EXPIRATION: ${APP_JWT_EXPIRATION:-3600000}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    expose:
+      - "8083"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  user-service:
+    image: user-service:latest
+    build: ./user-service
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${USER_PORT:-8081}
+      DB_IP: user-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: user_db
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-5GydVNDykHckescoG9UdVrprZZ2cIdQWHbIl6A6TWSrDTX9/mllSQP6rEsNBAOyGMRcPRL7ePBjZNvqOwNQiTg}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    expose:
+      - "8081"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  device-service:
+    image: device-service:latest
+    build: ./device-service
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${DEVICE_PORT:-8082}
+      DB_IP: device-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: device_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    expose:
+      - "8082"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  # ============= MONITORING SHARDS (6) =============
+  monitoring-1:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-1"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  monitoring-2:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-2"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  monitoring-3:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-3"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  monitoring-4:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-4"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  monitoring-5:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-5"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  monitoring-6:
+    image: monitoring-service:latest
+    env_file: [ ./.env ]
+    environment:
+      PORT: ${MONITORING_PORT:-8084}
+      DB_IP: monitoring-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Coso2404}
+      DB_DBNAME: monitoring_db
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      INGEST_QUEUE: "ingest-6"
+    expose:
+      - "8084"
+    networks: [ems]
+    deploy: { replicas: 1 }
+
+  websocket-service:
+    image: websocket-service:latest
+    env_file: [ ./.env ]
+    environment:
+      SERVER_PORT: ${WEBSOCKET_PORT:-8085}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    expose:
+      - "8085"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  customer-support-service:
+    image: customer-support-service:latest
+    env_file: [ ./.env ]
+    environment:
+      CHAT_RULES_ENABLED: "false"
+      SERVER_PORT: ${CUSTOMER_SUPPORT_PORT:-8086}
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "llama3.2:1b"
+      OLLAMA_TIMEOUT_SECONDS: "200"
+    expose:
+      - "8086"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  load-balancing-service:
+    image: load-balancing-service:latest
+    env_file: [ ./.env ]
+    environment:
+      SERVER_PORT: ${LOAD_BALANCING_PORT:-8088}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      MONITORING_REPLICAS: "6"
+    expose:
+      - "8088"
+    networks: [ems]
+    deploy:
+      replicas: 1
+
+  frontend:
+    image: frontend:latest
+    depends_on: [ traefik ]
+    networks: [ems]
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(`localhost`)"
+        - "traefik.http.routers.frontend.entrypoints=web"
+        - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+networks:
+  ems:
+    driver: overlay
+
+volumes:
+  auth_pgdata:
+  user_pgdata:
+  device_pgdata:
+  monitoring_pgdata:
+  ollama_data:

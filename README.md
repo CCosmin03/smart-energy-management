@@ -1,169 +1,181 @@
-Energy Management System – Part II
-Microservices, RabbitMQ Synchronization, Historical Consumption in the Frontend
+# Energy Management System – Part III
+## Load Balancing, WebSocket Notifications, Distributed Monitoring
 
-This project represents the second stage of the distributed system designed for managing users, IoT devices, and energy consumption monitoring. The architecture is organized into independent microservices, each with its own PostgreSQL database and communicating through HTTP and RabbitMQ. The frontend is implemented in React and communicates with the backend through Traefik, which acts as both a reverse proxy and an authentication gateway.
+This project represents the third stage of the distributed Energy Management System.  
+It extends the previous microservice-based architecture with **load balancing**, **replicated monitoring services**, and **real-time WebSocket notifications** for overconsumption events.
 
-The system supports microservice synchronization, real-time processing of energy measurements sent by an external simulator, and visualization of hourly consumption in the client interface.
+The system is composed of independent microservices, each with its own PostgreSQL database, communicating through HTTP, RabbitMQ, and WebSockets.  
+Traefik acts as a reverse proxy and authentication gateway, while RabbitMQ is used both for synchronization and for distributing measurement data across replicated services.
 
-General Architecture
+---
 
-Traefik receives all incoming HTTP requests, validates the JWT token using the ForwardAuth mechanism, and routes the requests to the appropriate internal microservices. Each microservice maintains its own database to ensure data isolation and independent deployment.
+## General Architecture
 
-Internal synchronization is implemented using RabbitMQ with a fanout exchange. The events transmitted are:
+Traefik receives all incoming HTTP requests, validates JWT tokens using the ForwardAuth mechanism, and routes requests to the appropriate microservices.
 
-USER_CREATED, USER_DELETED – published by user-service and consumed by device-service
+Each microservice:
+- has its own database
+- can be deployed and scaled independently
+- communicates asynchronously using RabbitMQ
 
-DEVICE_CREATED, DEVICE_UPDATED, DEVICE_DELETED – published by device-service and consumed by monitoring-service
+Two RabbitMQ communication patterns are used:
+1. **Fanout synchronization exchange** – for propagating structural events
+2. **Load-balanced queues** – for distributing measurement data across monitoring replicas
 
-MEASUREMENT_CREATED – published by the local simulator and consumed by monitoring-service
+---
 
-Energy consumption monitoring is performed in monitoring-service, which aggregates the measured values for each hour and stores them efficiently in its database.
+## Microservice Synchronization (RabbitMQ – Fanout)
 
-The frontend supports user authentication, listing of devices assigned to the authenticated user, and visualization of daily energy consumption through charts.
+A fanout exchange named `sync.exchange` is used to propagate state changes between services.
 
-Microservices
-auth-service
+Published events:
+- `USER_CREATED`, `USER_DELETED` – published by `user-service`
+- `DEVICE_CREATED`, `DEVICE_UPDATED`, `DEVICE_DELETED` – published by `device-service`
+- `MEASUREMENT_CREATED` – published by the simulator
 
-Handles user registration, authentication, and JWT generation. Traefik uses the /auth/verify endpoint for token validation.
-Associated database: auth_db
+Queues:
+- `sync.queue.device` – consumed by `device-service`
+- `sync.queue.monitoring` – consumed by `monitoring-service`
 
-user-service
+All synchronization messages are transmitted as `SyncEvent` objects serialized with Jackson.
 
-Exposes CRUD operations for users and publishes synchronization events to RabbitMQ.
-Associated database: user_db
+---
 
-device-service
+## Load Balancing for Measurements
 
-Manages IoT devices, user–device assignment and unassignment, and both publishes and consumes synchronization events.
-Associated database: device_db
+To support horizontal scaling of the monitoring layer, a **Load Balancing Service** is introduced.
 
-monitoring-service
+### Load Balancing Service
 
-Consumes device and measurement events, aggregates hourly consumption for each device, and exposes endpoints for historical visualization.
-Associated database: monitoring_db
+`load-balancing-service` consumes raw measurement messages from a single input queue:
 
-RabbitMQ and Microservice Synchronization
+- `device_data_queue`
 
-RabbitMQ is used to propagate state changes between microservices. A fanout exchange named sync.exchange is created, and each service has its own dedicated queue:
+For each message:
+1. The `deviceId` is extracted from the payload
+2. A deterministic hash (CRC32) is computed from `deviceId`
+3. The message is routed to **one specific ingest queue**:
+    - `ingest-1`, `ingest-2`, ..., `ingest-N`
 
-sync.queue.device – for device-service
+This ensures:
+- **No round-robin**
+- All measurements of the same device always reach the same monitoring replica
+- Correct aggregation of hourly consumption
 
-sync.queue.monitoring – for monitoring-service
+---
 
-Structural updates are sent as SyncEvent objects serialized using Jackson.
+## Monitoring Service (Replicated)
 
-Energy Data Simulator
+`monitoring-service` is deployed with multiple replicas (Docker Swarm).
 
-The simulator runs outside Docker (locally) and periodically sends MEASUREMENT_CREATED events to RabbitMQ. These events are consumed by monitoring-service, which aggregates their values into the hourly_consumption table.
+Each replica:
+- listens to exactly one ingest queue (`ingest-X`)
+- processes measurements independently
+- aggregates hourly consumption in its own database connection pool
+- detects overconsumption events
 
-The simulator computes consumption based on the current hour and sends measurements at configurable intervals.
+### Overconsumption Detection
 
-Frontend
+For each device:
+- hourly energy is accumulated
+- consumption is compared against the configured maximum power
+- a cooldown mechanism prevents repeated notifications
 
-The frontend is implemented in React and served through Nginx. Traefik exposes it at the root route (/).
+When overconsumption is detected, a notification is sent to the WebSocket service.
 
-Main functionalities:
+---
 
-authentication and registration
+## WebSocket Notifications
 
-listing of devices assigned to the logged-in user
+`websocket-service` exposes a STOMP/SockJS endpoint at:
+/ws
 
-selecting a day from a calendar
 
-visualizing hourly energy consumption using a bar or line chart
+Two types of messages are delivered:
+- **Overconsumption notifications**
+- **STOP commands** for simulators
 
-Running the System
+Notifications are broadcast on platform-level topics (e.g. `/topic/notifications`), as required by the assignment specification.
 
-Backend build:
+> The assignment does not explicitly require user-specific filtering of notifications.  
+> Notifications are therefore delivered at platform level, not per user.
+
+---
+
+## Energy Data Simulator
+
+The simulator runs locally (outside Docker).
+
+Responsibilities:
+- periodically generates measurement data
+- publishes `MEASUREMENT_CREATED` events to RabbitMQ
+- connects to `websocket-service` to listen for STOP commands
+
+The simulator stops automatically when a STOP command is received for its device.
+
+---
+
+## Frontend
+
+The frontend is implemented in React and served via Nginx.
+
+Main features:
+- authentication and registration
+- listing devices assigned to the logged-in user
+- visualization of historical hourly consumption
+- real-time overconsumption notifications via WebSocket
+
+---
+
+## Databases
+
+Each microservice has its own PostgreSQL database:
+- `auth_db`
+- `user_db`
+- `device_db`
+- `monitoring_db`
+
+Connection pooling is configured carefully to support multiple replicas of monitoring-service.
+
+---
+
+## Deployment
+
+The system is deployed using Docker and Docker Swarm.
+
+### Build backend services
 
 mvn clean package
 
+### Build Docker images
+docker build -t auth-service .
+docker build -t user-service .
+docker build -t device-service .
+docker build -t monitoring-service .
+docker build -t load-balancing-service .
+docker build -t websocket-service .
+docker build -t customer-support-service .
+docker build -t frontend .
 
-Docker image build:
+### Deploy stack (Swarm)
+docker stack deploy -c docker-stack.yml ems
 
-docker-compose build
-
-
-Start containers:
-
-docker-compose up -d
-
-
-Access endpoints:
+### Access Points
 
 Frontend: http://localhost
 
-Traefik dashboard: http://localhost:8080
+Traefik Dashboard: http://localhost:8080
 
-```mermaid
+RabbitMQ Management UI: http://localhost:15672
 
-%%{init: {'themeVariables': { 'fontSize': '14px', 'fontFamily': 'arial'}, 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 50}}}%%
-graph LR
-    %% --- 1. External Actors ---
-    subgraph External [External Actors]
-        direction TB
-        User_Browser["User (Browser UI)"]
-        Simulator_App["Device Data Simulator<br>(Local App)<br/>Publishes at amqp://localhost:5672"]
-    end
+### Conclusion
 
-    %% --- 2. Docker Host Environment ---
-    subgraph DockerHost [Docker Host Environment]
-        
-        %% Infrastructure Layer
-        subgraph infra_layer [Infrastructure & Routing Layer]
-            direction TB
-            traefik_node("Traefik Gateway<br/>HTTP Port: 80<br/>Dashboard: 8080")
-            frontend_node("Frontend (Nginx)<br/>Exposed via Traefik '/'<br/>Container Port: 80")
-            rabbitmq_node("RabbitMQ Broker<br/>AMQP: 5672<br/>Management UI: 15672")
-        end
+This stage introduces true distributed processing by:
 
-        %% Backend Microservices
-        subgraph backend_layer [Backend Microservices]
-            direction TB
-            auth_node("Auth Service<br/>HTTP Port: 8083")
-            user_node("User Service<br/>HTTP Port: 8081")
-            device_node("Device Service<br/>HTTP Port: 8082")
-            monitoring_node("Monitoring Service<br/>HTTP Port: 8084")
-        end
+adding deterministic load balancing
 
-        %% Database Layer
-        subgraph data_layer [Database Layer]
-            direction TB
-            auth_db[("Auth DB (PostgreSQL)<br/>Port: 5432")]
-            user_db[("User DB (PostgreSQL)<br/>Port: 5432")]
-            device_db[("Device DB (PostgreSQL)<br/>Port: 5432")]
-            monitoring_db[("Monitoring DB (PostgreSQL)<br/>Port: 5432")]
-        end
-    end
+supporting replicated monitoring services
 
-    %% ============= CONNECTIONS =============
+enabling real-time notifications via WebSockets
 
-    %% --- HTTP Routing (Traefik) ---
-    User_Browser ===> |"HTTP :80"| traefik_node
-    traefik_node --> |"Route '/' → Frontend"| frontend_node
-
-    traefik_node --> |"Route /api/auth → 8083"| auth_node
-    traefik_node --> |"Route /api/users → 8081"| user_node
-    traefik_node --> |"Route /api/devices → 8082"| device_node
-    traefik_node --> |"Route /api/monitoring → 8084"| monitoring_node
-
-    %% --- Database Connections ---
-    auth_node --> |"JDBC 5432"| auth_db
-    user_node --> |"JDBC 5432"| user_db
-    device_node --> |"JDBC 5432"| device_db
-    monitoring_node --> |"JDBC 5432"| monitoring_db
-
-    %% --- RabbitMQ Async Flows ---
-    Simulator_App -.-> |"AMQP Publish :5672<br/>MEASUREMENT_CREATED"| rabbitmq_node
-    rabbitmq_node -.-> |"Consume :5672<br/>MEASUREMENT_CREATED"| monitoring_node
-
-    user_node -.-> |"Publish USER_CREATED / USER_DELETED"| rabbitmq_node
-    device_node -.-> |"Publish DEVICE_CREATED / UPDATED / DELETED"| rabbitmq_node
-
-    rabbitmq_node -.-> |"Consume USER_*"| device_node
-    rabbitmq_node -.-> |"Consume DEVICE_*"| monitoring_node
-
-    %% Styling
-    classDef container fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
-    class DockerHost container;
-    linkStyle default stroke-width:2px,fill:none,stroke:black;
+The system remains modular, scalable, and compliant with the assignment requirements.

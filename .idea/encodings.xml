@@ -3,9 +3,12 @@
   <component name="Encoding">
     <file url="file://$PROJECT_DIR$/ems/api-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ems/auth-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ems/customer-support-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ems/device-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ems/load-balancing-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ems/monitoring-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/ems/user-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ems/websocket-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/simulator/src/main/java" charset="UTF-8" />
   </component>
 </project>

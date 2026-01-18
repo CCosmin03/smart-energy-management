@@ -23,6 +23,13 @@ function AdminDashboard() {
                         Users
                     </button>
                     <button
+                        className={activePage === "chat" ? "active" : ""}
+                        onClick={() => window.location.href = "/admin/chat"}
+                    >
+                        Chat
+                    </button>
+
+                    <button
                         className={activePage === "devices" ? "active" : ""}
                         onClick={() => setActivePage("devices")}
                     >

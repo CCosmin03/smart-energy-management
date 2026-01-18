@@ -74,6 +74,16 @@ services:
       - monitoring_pgdata:/var/lib/postgresql
     networks: [ems]
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [ ems ]
+
+
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: rabbitmq
@@ -175,11 +185,70 @@ services:
       RABBITMQ_USER: ${RABBIT_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
       JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
     depends_on:
       monitoring-db: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     expose:
       - "8084"
+    networks: [ems]
+
+  # ==========================
+  # NEW: websocket-service
+  # ==========================
+  websocket-service:
+    build: ./websocket-service
+    container_name: websocket-service
+    env_file: [ ./.env ]
+    environment:
+      SERVER_PORT: ${WEBSOCKET_PORT:-8085}
+      # daca tu folosesti server.port=... in properties, Spring accepta SERVER_PORT ca override
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    expose:
+      - "8085"
+    networks: [ems]
+
+  # ==========================
+  # NEW: customer-support-service
+  # ==========================
+  customer-support-service:
+    build: ./customer-support-service
+    container_name: customer-support-service
+    env_file: [ ./.env ]
+    environment:
+      CHAT_RULES_ENABLED: "false"   # sau true
+      SERVER_PORT: ${CUSTOMER_SUPPORT_PORT:-8086}
+      WEBSOCKET_SERVICE_URL: "http://websocket-service:8085"
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "llama3.2:1b"
+      OLLAMA_TIMEOUT_SECONDS: "200"
+    depends_on:
+      websocket-service:
+        condition: service_started
+    expose:
+      - "8086"
+    networks: [ems]
+
+  # ==========================
+  # NEW: load-balancing-service
+  # ==========================
+  load-balancing-service:
+    build: ./load-balancing-service
+    container_name: load-balancing-service
+    env_file: [ ./.env ]
+    environment:
+      SERVER_PORT: ${LOAD_BALANCING_PORT:-8088}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBIT_PASSWORD:-guest}
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    expose:
+      - "8088"
     networks: [ems]
 
   frontend:
@@ -201,3 +270,4 @@ volumes:
   user_pgdata:
   device_pgdata:
   monitoring_pgdata:
+  ollama_data:

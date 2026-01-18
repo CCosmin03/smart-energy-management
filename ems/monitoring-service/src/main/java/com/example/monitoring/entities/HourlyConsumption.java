@@ -16,11 +16,15 @@ public class HourlyConsumption {
     private UUID id;
 
     @JdbcTypeCode(SqlTypes.UUID)
+    @Column(name = "device_id", nullable = false)
     private UUID deviceId;
 
+    @Column(name = "hour_timestamp", nullable = false)
     private LocalDateTime hourTimestamp;
 
+    @Column(name = "energy_kwh", nullable = false)
     private double energyKwh;
+
 
     public HourlyConsumption() {
         this.id = UUID.randomUUID();
@@ -49,7 +53,7 @@ public class HourlyConsumption {
         return energyKwh;
     }
 
-    public void add(double value) {
-        this.energyKwh += value;
+    public void add(double valueKwh) {
+        this.energyKwh += valueKwh;
     }
 }

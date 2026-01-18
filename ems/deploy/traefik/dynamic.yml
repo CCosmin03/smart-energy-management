@@ -11,39 +11,77 @@ http:
         authResponseHeaders:
           - "X-User-Id"
           - "X-User-Role"
+        authRequestHeaders:
+           - "Authorization"
 
   routers:
-    # Public
+
+    # AUTH public
     auth-public:
-      rule: "PathPrefix(`/auth/login`) || PathPrefix(`/auth/register`)"
-      entryPoints: [ "web" ]
+      rule: "PathPrefix(`/api/auth/login`) || PathPrefix(`/api/auth/register`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
       service: auth-svc
+      priority: 100
 
-    verify:
-      rule: "PathPrefix(`/auth/verify`)"
-      entryPoints: [ "web" ]
+    # AUTH verify (chemat de Traefik, nu trebuie sa fie protejat de auth-forward)
+    auth-verify:
+      rule: "PathPrefix(`/api/auth/verify`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
       service: auth-svc
+      priority: 100
 
-    # Protected
+    # PROTECTED APIs
     users:
-      rule: "PathPrefix(`/users`)"
-      entryPoints: [ "web" ]
-      middlewares: [ "auth-forward" ]
+      rule: "PathPrefix(`/api/users`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
       service: user-svc
+      priority: 100
 
     devices:
-      rule: "PathPrefix(`/devices`) || PathPrefix(`/assignments`)"
-      entryPoints: [ "web" ]
-      middlewares: [ "auth-forward" ]
+      rule: "PathPrefix(`/api/devices`) || PathPrefix(`/api/assignments`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
       service: device-svc
+      priority: 100
 
     monitoring:
-      rule: "PathPrefix(`/monitoring`)"
-      entryPoints: [ "web" ]
-      middlewares: [ "auth-forward" ]
+      rule: "PathPrefix(`/api/monitoring`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
       service: monitoring-svc
+      priority: 100
+
+    customer-support:
+      rule: "PathPrefix(`/api/chat`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
+      service: customer-support-svc
+      priority: 100
+
+    # WS: fara auth-forward
+    websocket-stomp:
+      rule: "PathPrefix(`/ws`)"
+      entryPoints: ["web"]
+      service: websocket-svc
+      priority: 200
+
+    # notify REST: cu auth-forward
+    websocket-notify:
+      rule: "PathPrefix(`/api/notify`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
+      service: websocket-svc
+      priority: 100
 
   services:
+    frontend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
+
     auth-svc:
       loadBalancer:
         servers:
@@ -62,4 +100,14 @@ http:
     monitoring-svc:
       loadBalancer:
         servers:
-          - url: "http://monitoring-service:8084"
+          - url: "http://monitoring-1:8084"
+
+    websocket-svc:
+      loadBalancer:
+        servers:
+          - url: "http://websocket-service:8085"
+
+    customer-support-svc:
+      loadBalancer:
+        servers:
+          - url: "http://customer-support-service:8086"

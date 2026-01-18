@@ -1,13 +1,11 @@
 package com.example.monitoring.config;
 
 import com.example.monitoring.events.MeasurementEvent;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.FanoutExchange;
-import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.support.converter.DefaultClassMapper;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import com.example.monitoring.events.SyncEvent;
@@ -29,12 +27,17 @@ public class RabbitConfig {
 
     @Bean
     public Queue syncQueue() {
-        return new Queue(SYNC_QUEUE, false);
+        return QueueBuilder.durable(SYNC_QUEUE).build();
     }
 
     @Bean
     public Binding bindingSyncQueue(FanoutExchange syncExchange, Queue syncQueue) {
         return BindingBuilder.bind(syncQueue).to(syncExchange);
+    }
+
+    @Bean
+    public Queue ingestQueue(@Value("${monitoring.ingest.queue}") String ingestQueueName) {
+        return QueueBuilder.durable(ingestQueueName).build();
     }
 
     @Bean

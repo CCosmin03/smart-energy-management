@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class MonitoringService {
@@ -18,12 +20,11 @@ public class MonitoringService {
     }
 
     public List<Double> getDailyConsumption(UUID deviceId, LocalDate date) {
-
         LocalDateTime start = date.atStartOfDay();
         LocalDateTime end = date.plusDays(1).atStartOfDay();
 
         List<HourlyConsumption> rows =
-                repo.findByDeviceIdAndHourTimestampBetween(deviceId, start, end);
+                repo.findByDeviceIdAndHourTimestampGreaterThanEqualAndHourTimestampLessThan(deviceId, start, end);
 
         double[] hours = new double[24];
 

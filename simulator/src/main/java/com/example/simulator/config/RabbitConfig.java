@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitConfig {
 
     public static final String SYNC_EXCHANGE = "sync.exchange";
+    public static final String DEVICE_DATA_QUEUE = "device_data_queue";
+
 
     @Bean
     public FanoutExchange syncExchange() {

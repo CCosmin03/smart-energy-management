@@ -11,11 +11,11 @@ function DevicesPage() {
     const payload = JSON.parse(atob(token.split(".")[1]));
     const role = payload.role;
 
-    const API = "http://localhost";
+    //const API = "http://localhost";
 
     // === Fetch all devices ===
     const fetchDevices = async () => {
-        const res = await fetch(`${API}/devices`, {
+        const res = await fetch(`http://localhost/api/devices`, {
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
         if (res.ok) {
@@ -25,7 +25,7 @@ function DevicesPage() {
 
     // === Fetch all assignments ===
     const fetchAssignments = async () => {
-        const res = await fetch(`${API}/assignments`, {
+        const res = await fetch(`http://localhost/api/assignments`, {
             headers: { "Authorization": `Bearer ${token}` },
         });
         if (res.ok) {
@@ -43,8 +43,8 @@ function DevicesPage() {
         e.preventDefault();
         const method = editingId ? "PUT" : "POST";
         const url = editingId
-            ? `${API}/devices/${editingId}`
-            : `${API}/devices`;
+            ? `http://localhost/api/devices/${editingId}`
+            : `http://localhost/api/devices`;
 
         const payload = {
             name: form.name,
@@ -72,7 +72,7 @@ function DevicesPage() {
     // === DELETE DEVICE ===
     const handleDelete = async (id) => {
         if (!window.confirm("Delete this device?")) return;
-        const res = await fetch(`${API}/devices/${id}`, {
+        const res = await fetch(`http://localhost/api/devices/${id}`, {
             method: "DELETE",
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
@@ -89,7 +89,7 @@ function DevicesPage() {
             return;
         }
 
-        const res = await fetch(`${API}/assignments`, {
+        const res = await fetch(`http://localhost/api/assignments`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -112,7 +112,7 @@ function DevicesPage() {
 
     // === UNASSIGN ===
     const handleUnassign = async (deviceId) => {
-        const res = await fetch(`${API}/assignments/${deviceId}`, {
+        const res = await fetch(`http://localhost/api/assignments/${deviceId}`, {
             method: "DELETE",
             headers: { "Authorization": `Bearer ${token}` },
         });

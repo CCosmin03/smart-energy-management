@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createStompClient } from "../utils/ws";
 import "./ClientDashboard.css";
 import {
     LineChart,
@@ -27,7 +28,83 @@ function ClientDashboard() {
     const [loadingConsumption, setLoadingConsumption] = useState(false);
     const [consumptionError, setConsumptionError] = useState("");
 
-    const API_URL = import.meta.env.VITE_API_URL;
+    const [notifications, setNotifications] = useState([]);
+
+    // keep latest selected device id for websocket callback
+    const selectedDeviceIdRef = useRef(selectedDeviceId);
+    useEffect(() => {
+        selectedDeviceIdRef.current = selectedDeviceId;
+    }, [selectedDeviceId]);
+
+    // ===================== Fetch consumption (reusable) =====================
+    const fetchConsumption = async () => {
+        if (!selectedDeviceIdRef.current || !selectedDate) return;
+
+        try {
+            setLoadingConsumption(true);
+            setConsumptionError("");
+
+            const token = localStorage.getItem("token");
+            if (!token) {
+                window.location.href = "/login";
+                return;
+            }
+
+            const res = await fetch(
+                `http://localhost/api/monitoring/device/${selectedDeviceIdRef.current}?date=${selectedDate}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!res.ok) {
+                throw new Error("Failed to load consumption data");
+            }
+
+            const data = await res.json(); // List<Double> de 24 elemente
+            setConsumption(data);
+        } catch (err) {
+            console.error(err);
+            setConsumptionError("Could not load consumption data for this day.");
+            setConsumption([]);
+        } finally {
+            setLoadingConsumption(false);
+        }
+    };
+
+    // ===================== 0. WebSocket notifications =====================
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const stomp = createStompClient({
+            onConnect: () => {
+                stomp.subscribe("/topic/notifications", (frame) => {
+                    try {
+                        const payload = JSON.parse(frame.body); // { deviceId, message, timestamp }
+
+                        setNotifications((prev) => [payload, ...prev].slice(0, 5));
+
+                        // refresh charts ONLY if notification is for selected device
+                        if (payload.deviceId === selectedDeviceIdRef.current) {
+                            fetchConsumption();
+                        }
+                    } catch (e) {
+                        console.error("Invalid notification payload:", e);
+                    }
+                });
+            },
+            onError: (err) => {
+                console.error("STOMP error:", err);
+            },
+        });
+
+        stomp.activate();
+        return () => stomp.deactivate();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // keep single connection
 
     // ===================== 1. Fetch devices =====================
     useEffect(() => {
@@ -43,9 +120,9 @@ function ClientDashboard() {
                 const userId = payload.userId;
                 const role = payload.role;
 
-                const res = await fetch(`${API_URL}/devices/user/${userId}`, {
+                const res = await fetch(`http://localhost/api/devices/user/${userId}`, {
                     headers: {
-                        "Authorization": `Bearer ${token}`,
+                        Authorization: `Bearer ${token}`,
                         "X-User-Id": userId,
                         "X-User-Role": role,
                     },
@@ -68,50 +145,29 @@ function ClientDashboard() {
         };
 
         fetchDevices();
-    }, [API_URL]);
+    }, []);
 
-    // ===================== 2. Fetch consumption =====================
+    // ===================== 2. Fetch consumption (when device/date changes) =====================
     useEffect(() => {
-        const fetchConsumption = async () => {
-            if (!selectedDeviceId || !selectedDate) return;
+        // sync ref to the latest selection (important)
+        selectedDeviceIdRef.current = selectedDeviceId;
 
-            try {
-                setLoadingConsumption(true);
-                setConsumptionError("");
+        // fetch right away
+        if (selectedDeviceId) {
+            fetchConsumption();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedDeviceId, selectedDate]);
 
-                const token = localStorage.getItem("token");
-                if (!token) {
-                    window.location.href = "/login";
-                    return;
-                }
-
-                const res = await fetch(
-                    `${API_URL}/monitoring/device/${selectedDeviceId}?date=${selectedDate}`,
-                    {
-                        headers: {
-                            "Authorization": `Bearer ${token}`,
-                        },
-                    }
-                );
-
-                if (!res.ok) {
-                    throw new Error("Failed to load consumption data");
-                }
-
-                // Backend întoarce List<Double> de 24 elemente
-                const data = await res.json();
-                setConsumption(data);
-            } catch (err) {
-                console.error(err);
-                setConsumptionError("Could not load consumption data for this day.");
-                setConsumption([]);
-            } finally {
-                setLoadingConsumption(false);
-            }
-        };
-
-        fetchConsumption();
-    }, [API_URL, selectedDeviceId, selectedDate]);
+    // ===================== OPTIONAL: polling every 3s =====================
+    // useEffect(() => {
+    //   if (!selectedDeviceId || !selectedDate) return;
+    //   const id = setInterval(() => {
+    //     fetchConsumption();
+    //   }, 3000);
+    //   return () => clearInterval(id);
+    //   // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [selectedDeviceId, selectedDate]);
 
     // ===================== 3. Transform data pentru Recharts =====================
     const chartData = consumption.map((value, hour) => ({
@@ -131,10 +187,25 @@ function ClientDashboard() {
                 <button onClick={handleLogout} className="logout-btn">
                     Logout
                 </button>
+                <button
+                    onClick={() => (window.location.href = "/client/chat")}
+                    className="logout-btn"
+                >
+                    Chat
+                </button>
             </header>
 
+            {notifications.length > 0 && (
+                <div className="notifications">
+                    {notifications.map((n, idx) => (
+                        <div key={idx} className="notification">
+                            <b>{n.deviceId}</b>: {n.message}
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <main className="content">
-                {/* === Secțiune device-uri === */}
                 {loadingDevices ? (
                     <p>Loading your devices...</p>
                 ) : devicesError ? (
@@ -159,9 +230,7 @@ function ClientDashboard() {
                                     <tr
                                         key={device.id}
                                         className={
-                                            device.id === selectedDeviceId
-                                                ? "selected-row"
-                                                : ""
+                                            device.id === selectedDeviceId ? "selected-row" : ""
                                         }
                                         onClick={() => setSelectedDeviceId(device.id)}
                                     >
@@ -175,16 +244,13 @@ function ClientDashboard() {
                             </table>
                         </section>
 
-                        {/* === Secțiune grafic consum === */}
                         <section className="chart-section">
                             <div className="chart-controls">
                                 <div>
                                     <label>Device:&nbsp;</label>
                                     <select
                                         value={selectedDeviceId}
-                                        onChange={(e) =>
-                                            setSelectedDeviceId(e.target.value)
-                                        }
+                                        onChange={(e) => setSelectedDeviceId(e.target.value)}
                                     >
                                         {devices.map((d) => (
                                             <option key={d.id} value={d.id}>
@@ -234,11 +300,7 @@ function ClientDashboard() {
                                                 />
                                                 <Tooltip />
                                                 <Legend />
-                                                <Line
-                                                    type="monotone"
-                                                    dataKey="consumption"
-                                                    dot={false}
-                                                />
+                                                <Line type="monotone" dataKey="consumption" dot={false} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>

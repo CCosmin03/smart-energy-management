@@ -7,7 +7,8 @@ api:
   insecure: true
 
 providers:
-  docker:
+  swarm:
+    endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
   file:
     filename: "/etc/traefik/dynamic.yml"
@@ -15,4 +16,3 @@ providers:
 
 log:
   level: INFO
-accessLog: {}

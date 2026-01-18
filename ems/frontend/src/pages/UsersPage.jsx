@@ -10,7 +10,7 @@ function UsersPage() {
     const role = payload.role;
 
     const fetchUsers = async () => {
-        const res = await fetch("http://localhost/users", {
+        const res = await fetch("http://localhost/api/users", {
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
         if (res.ok) {
@@ -18,7 +18,7 @@ function UsersPage() {
 
             const enriched = await Promise.all(
                 data.map(async (u) => {
-                    const detailRes = await fetch(`http://localhost/users/${u.id}`, {
+                    const detailRes = await fetch(`http://localhost/api/users/${u.id}`, {
                         headers: {
                             "X-User-Id": payload.userId || payload.id,
                             "X-User-Role": role,
@@ -42,7 +42,7 @@ function UsersPage() {
         e.preventDefault();
 
         const method = editingId ? "PUT" : "POST";
-        const url = editingId ? `http://localhost/users/${editingId}` : "http://localhost/users";
+        const url = editingId ? `http://localhost/api/users/${editingId}` : "http://localhost/api/users";
 
         const res = await fetch(url, {
             method,
@@ -69,7 +69,7 @@ function UsersPage() {
 
     const handleDelete = async (id) => {
         if (!window.confirm("Delete this user?")) return;
-        const res = await fetch(`http://localhost/users/${id}`, {
+        const res = await fetch(`http://localhost/api/users/${id}`, {
             method: "DELETE",
             headers: { "X-User-Role": role, "Authorization": `Bearer ${token}` },
         });
