@@ -1,96 +1,181 @@
-Microservices-Based Energy Management System
+# Energy Management System – Part III
+## Load Balancing, WebSocket Notifications, Distributed Monitoring
 
-This project implements a microservices architecture for managing users, authentication, and IoT devices. The system consists of separate services for authentication, user management, and device management, each running in its own Docker container and connected to a dedicated PostgreSQL database. The frontend is developed in React and communicates with the backend through Traefik, which acts as a reverse proxy and authentication gateway.
+This project represents the third stage of the distributed Energy Management System.  
+It extends the previous microservice-based architecture with **load balancing**, **replicated monitoring services**, and **real-time WebSocket notifications** for overconsumption events.
 
-The backend is built using Spring Boot 4.0.0-SNAPSHOT, Java 25, and PostgreSQL. Each service exposes a REST API. Traefik handles routing and authentication forwarding between the frontend and backend services.
+The system is composed of independent microservices, each with its own PostgreSQL database, communicating through HTTP, RabbitMQ, and WebSockets.  
+Traefik acts as a reverse proxy and authentication gateway, while RabbitMQ is used both for synchronization and for distributing measurement data across replicated services.
 
-Services and Ports
+---
 
-auth-service: handles user registration, login, and JWT verification (port 8083)
+## General Architecture
 
-user-service: manages user data and CRUD operations (port 8081)
+Traefik receives all incoming HTTP requests, validates JWT tokens using the ForwardAuth mechanism, and routes requests to the appropriate microservices.
 
-device-service: manages IoT devices, assignment and unassignment to users (port 8082)
+Each microservice:
+- has its own database
+- can be deployed and scaled independently
+- communicates asynchronously using RabbitMQ
 
-traefik: reverse proxy and load balancer (port 80 for HTTP, 8080 for dashboard)
+Two RabbitMQ communication patterns are used:
+1. **Fanout synchronization exchange** – for propagating structural events
+2. **Load-balanced queues** – for distributing measurement data across monitoring replicas
 
-frontend: React application served through Nginx (port 80)
+---
 
-PostgreSQL databases for each service (auth_db, user_db, device_db)
+## Microservice Synchronization (RabbitMQ – Fanout)
 
-Docker containers communicate over a common network called ems. Each microservice connects to its respective database using environment variables defined in the .env file.
+A fanout exchange named `sync.exchange` is used to propagate state changes between services.
 
-How to Run
+Published events:
+- `USER_CREATED`, `USER_DELETED` – published by `user-service`
+- `DEVICE_CREATED`, `DEVICE_UPDATED`, `DEVICE_DELETED` – published by `device-service`
+- `MEASUREMENT_CREATED` – published by the simulator
 
-Build all backend services using Maven: mvn clean package
+Queues:
+- `sync.queue.device` – consumed by `device-service`
+- `sync.queue.monitoring` – consumed by `monitoring-service`
 
-Build Docker images for each service: docker-compose build
+All synchronization messages are transmitted as `SyncEvent` objects serialized with Jackson.
 
-Start all containers: docker-compose up -d
+---
 
-Access the system:
+## Load Balancing for Measurements
+
+To support horizontal scaling of the monitoring layer, a **Load Balancing Service** is introduced.
+
+### Load Balancing Service
+
+`load-balancing-service` consumes raw measurement messages from a single input queue:
+
+- `device_data_queue`
+
+For each message:
+1. The `deviceId` is extracted from the payload
+2. A deterministic hash (CRC32) is computed from `deviceId`
+3. The message is routed to **one specific ingest queue**:
+    - `ingest-1`, `ingest-2`, ..., `ingest-N`
+
+This ensures:
+- **No round-robin**
+- All measurements of the same device always reach the same monitoring replica
+- Correct aggregation of hourly consumption
+
+---
+
+## Monitoring Service (Replicated)
+
+`monitoring-service` is deployed with multiple replicas (Docker Swarm).
+
+Each replica:
+- listens to exactly one ingest queue (`ingest-X`)
+- processes measurements independently
+- aggregates hourly consumption in its own database connection pool
+- detects overconsumption events
+
+### Overconsumption Detection
+
+For each device:
+- hourly energy is accumulated
+- consumption is compared against the configured maximum power
+- a cooldown mechanism prevents repeated notifications
+
+When overconsumption is detected, a notification is sent to the WebSocket service.
+
+---
+
+## WebSocket Notifications
+
+`websocket-service` exposes a STOMP/SockJS endpoint at:
+/ws
+
+
+Two types of messages are delivered:
+- **Overconsumption notifications**
+- **STOP commands** for simulators
+
+Notifications are broadcast on platform-level topics (e.g. `/topic/notifications`), as required by the assignment specification.
+
+> The assignment does not explicitly require user-specific filtering of notifications.  
+> Notifications are therefore delivered at platform level, not per user.
+
+---
+
+## Energy Data Simulator
+
+The simulator runs locally (outside Docker).
+
+Responsibilities:
+- periodically generates measurement data
+- publishes `MEASUREMENT_CREATED` events to RabbitMQ
+- connects to `websocket-service` to listen for STOP commands
+
+The simulator stops automatically when a STOP command is received for its device.
+
+---
+
+## Frontend
+
+The frontend is implemented in React and served via Nginx.
+
+Main features:
+- authentication and registration
+- listing devices assigned to the logged-in user
+- visualization of historical hourly consumption
+- real-time overconsumption notifications via WebSocket
+
+---
+
+## Databases
+
+Each microservice has its own PostgreSQL database:
+- `auth_db`
+- `user_db`
+- `device_db`
+- `monitoring_db`
+
+Connection pooling is configured carefully to support multiple replicas of monitoring-service.
+
+---
+
+## Deployment
+
+The system is deployed using Docker and Docker Swarm.
+
+### Build backend services
+
+mvn clean package
+
+### Build Docker images
+docker build -t auth-service .
+docker build -t user-service .
+docker build -t device-service .
+docker build -t monitoring-service .
+docker build -t load-balancing-service .
+docker build -t websocket-service .
+docker build -t customer-support-service .
+docker build -t frontend .
+
+### Deploy stack (Swarm)
+docker stack deploy -c docker-stack.yml ems
+
+### Access Points
 
 Frontend: http://localhost
 
-Traefik dashboard: http://localhost:8080
+Traefik Dashboard: http://localhost:8080
 
-Architecture Overview
-The frontend interacts with Traefik, which forwards requests to the corresponding backend service based on the request path. Authentication is managed through the auth-service, which issues JWT tokens. Traefik uses the /auth/verify endpoint for token validation through forward authentication. Each backend service communicates with its own PostgreSQL container for persistent storage.
+RabbitMQ Management UI: http://localhost:15672
 
-Technologies Used
+### Conclusion
 
-Spring Boot 4.0.0-SNAPSHOT
+This stage introduces true distributed processing by:
 
-Java 25
+adding deterministic load balancing
 
-PostgreSQL 18
+supporting replicated monitoring services
 
-React
+enabling real-time notifications via WebSockets
 
-Traefik v3.1
-
-Docker and Docker Compose
-
-
-This architecture ensures modularity, scalability, and clear separation of concerns between authentication, user management, and device management. Each service can be independently maintained and deployed while communicating securely through Traefik.
-
-```mermaid
-graph TD
-%% ===== STYLING =====
-classDef docker fill:#EAF3FF,stroke:#1E56A0,stroke-width:2px,color:#000,font-size:12px
-classDef db fill:#D6EAF8,stroke:#2980B9,stroke-width:2px,color:#000,font-size:12px
-classDef actor fill:#FFF3E0,stroke:#E67E22,stroke-width:2px,color:#000,font-size:12px
-
-%% ===== ACTOR =====
-A[/"End User\n(Client / Admin)"/]:::actor
-
-%% ===== FRONTEND =====
-B[Docker: frontend\nReact + Nginx\nPorts 80:80]:::docker
-A -->|HTTP (80)| T
-
-%% ===== TRAEFIK =====
-T[Docker: traefik\nReverse Proxy + Auth Forwarding\nPorts 80:80, 8080:8080]:::docker
-T -->|Route / → frontend| B
-T -->|/auth/*| C
-T -->|/users/*| D
-T -->|/devices/*| E
-
-%% ===== AUTH SERVICE =====
-C[Docker: auth-service\nSpring Boot + Tomcat\nPort 8083]:::docker
-C -->|JDBC (5432)| F
-F[Docker: auth-db\nPostgreSQL\nPort 5432]:::db
-
-%% ===== USER SERVICE =====
-D[Docker: user-service\nSpring Boot + Tomcat\nPort 8081]:::docker
-D -->|JDBC (5433)| G
-G[Docker: user-db\nPostgreSQL\nPort 5433]:::db
-
-%% ===== DEVICE SERVICE =====
-E[Docker: device-service\nSpring Boot + Tomcat\nPort 8082]:::docker
-E -->|JDBC (5434)| H
-H[Docker: device-db\nPostgreSQL\nPort 5434]:::db
-
-%% ===== INTER-SERVICE COMMUNICATION =====
-C -->|POST /users (register)| D
-D -->|GET /devices/user/{id}| E
-E -->|GET /users/{id}| D
+The system remains modular, scalable, and compliant with the assignment requirements.

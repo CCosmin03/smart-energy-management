@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="auth-service" />
+        <module name="simulator" />
+        <module name="monitoring-service" />
+        <module name="user-service" />
+        <module name="device-service" />
+        <module name="websocket-service" />
+        <module name="customer-support-service" />
+        <module name="load-balancing-service" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="api-service" target="25" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="api-service" options="-parameters" />
+      <module name="auth-service" options="-parameters" />
+      <module name="customer-support-service" options="-parameters" />
+      <module name="device-service" options="-parameters" />
+      <module name="load-balancing-service" options="-parameters" />
+      <module name="monitoring-service" options="-parameters" />
+      <module name="simulator" options="-parameters" />
+      <module name="user-service" options="-parameters" />
+      <module name="websocket-service" options="-parameters" />
+    </option>
+  </component>
+</project>

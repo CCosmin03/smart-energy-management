@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="MavenProjectsManager">
+    <option name="originalFiles">
+      <list>
+        <option value="$PROJECT_DIR$/ems/api-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/auth-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/user-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/device-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/monitoring-service/pom.xml" />
+        <option value="$PROJECT_DIR$/simulator/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/websocket-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/customer-support-service/pom.xml" />
+        <option value="$PROJECT_DIR$/ems/load-balancing-service/pom.xml" />
+      </list>
+    </option>
+    <option name="ignoredFiles">
+      <set>
+        <option value="$PROJECT_DIR$/ems/api-service/pom.xml" />
+      </set>
+    </option>
+  </component>
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_25" default="true" project-jdk-name="25" project-jdk-type="JavaSDK">
+    <output url="file://$PROJECT_DIR$/out" />
+  </component>
+</project>

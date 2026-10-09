@@ -1,0 +1,145 @@
+.admin-dashboard {
+    display: flex;
+    min-height: 100vh;
+    font-family: 'Segoe UI', sans-serif;
+    background: #f4f5f7;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 230px;
+    background: #1f2937;
+    color: white;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.sidebar h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.sidebar nav button {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: white;
+    text-align: left;
+    padding: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.3s;
+}
+
+.sidebar nav button:hover,
+.sidebar nav .active {
+    background: #374151;
+}
+
+.logout-btn {
+    background: #ef4444;
+    border: none;
+    padding: 10px;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+.logout-btn:hover {
+    background: #dc2626;
+}
+
+/* Main content */
+.content {
+    flex-grow: 1;
+    padding: 30px;
+}
+
+/* Tables */
+.table-container {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    color: #111827; /* text mai închis */
+}
+
+.table-container h2 {
+    margin-bottom: 15px;
+    color: #111827; /* titlu clar, vizibil */
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th, td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 12px;
+    text-align: left;
+    color: #1f2937; /* text normal închis */
+}
+
+th {
+    background: #f3f4f6; /* un pic mai contrastant */
+    color: #111827; /* antet mai întunecat */
+}
+
+button {
+    background: #3b82f6;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 5px;
+    font-size: 14px;
+}
+
+button:hover {
+    background: #2563eb;
+}
+
+button.danger {
+    background: #ef4444;
+}
+
+button.danger:hover {
+    background: #dc2626;
+}
+/* CRUD form */
+.crud-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.crud-form input,
+.crud-form select {
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    flex: 1;
+    min-width: 140px;
+}
+
+.assign-container {
+    margin-bottom: 15px;
+}
+
+.assign-container input {
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    width: 100%;
+    max-width: 300px;
+}

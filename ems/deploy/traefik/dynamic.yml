@@ -1,0 +1,113 @@
+http:
+  middlewares:
+    strip-api-prefix:
+      stripPrefix:
+        prefixes: ["/api"]
+
+    auth-forward:
+      forwardAuth:
+        address: "http://auth-service:8083/auth/verify"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "X-User-Id"
+          - "X-User-Role"
+        authRequestHeaders:
+           - "Authorization"
+
+  routers:
+
+    # AUTH public
+    auth-public:
+      rule: "PathPrefix(`/api/auth/login`) || PathPrefix(`/api/auth/register`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
+      service: auth-svc
+      priority: 100
+
+    # AUTH verify (chemat de Traefik, nu trebuie sa fie protejat de auth-forward)
+    auth-verify:
+      rule: "PathPrefix(`/api/auth/verify`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
+      service: auth-svc
+      priority: 100
+
+    # PROTECTED APIs
+    users:
+      rule: "PathPrefix(`/api/users`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
+      service: user-svc
+      priority: 100
+
+    devices:
+      rule: "PathPrefix(`/api/devices`) || PathPrefix(`/api/assignments`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
+      service: device-svc
+      priority: 100
+
+    monitoring:
+      rule: "PathPrefix(`/api/monitoring`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
+      service: monitoring-svc
+      priority: 100
+
+    customer-support:
+      rule: "PathPrefix(`/api/chat`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix","auth-forward"]
+      service: customer-support-svc
+      priority: 100
+
+    # WS: fara auth-forward
+    websocket-stomp:
+      rule: "PathPrefix(`/ws`)"
+      entryPoints: ["web"]
+      service: websocket-svc
+      priority: 200
+
+    # notify REST: cu auth-forward
+    websocket-notify:
+      rule: "PathPrefix(`/api/notify`)"
+      entryPoints: ["web"]
+      middlewares: ["strip-api-prefix"]
+      service: websocket-svc
+      priority: 100
+
+  services:
+    frontend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
+
+    auth-svc:
+      loadBalancer:
+        servers:
+          - url: "http://auth-service:8083"
+
+    user-svc:
+      loadBalancer:
+        servers:
+          - url: "http://user-service:8081"
+
+    device-svc:
+      loadBalancer:
+        servers:
+          - url: "http://device-service:8082"
+
+    monitoring-svc:
+      loadBalancer:
+        servers:
+          - url: "http://monitoring-1:8084"
+
+    websocket-svc:
+      loadBalancer:
+        servers:
+          - url: "http://websocket-service:8085"
+
+    customer-support-svc:
+      loadBalancer:
+        servers:
+          - url: "http://customer-support-service:8086"

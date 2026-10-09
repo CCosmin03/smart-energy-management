@@ -1,0 +1,206 @@
+.client-dashboard {
+    min-height: 100vh;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #f4f5f7;
+    color: #111827;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* ================= Header ================= */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    background: #1f2937;
+    color: white;
+    padding: 16px 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+
+    /* important: header ramane mereu vizibil */
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 22px;
+    white-space: nowrap;
+}
+
+/* daca ai multe butoane, le tine frumos la dreapta */
+.header > div,
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Buttons */
+.logout-btn {
+    background: #ef4444;
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.logout-btn:hover {
+    background: #dc2626;
+}
+
+/* Daca vrei ca butonul Chat sa fie albastru (optional).
+   In React ai ambele cu className="logout-btn", deci le diferentiem prin selector */
+.header button:last-child.logout-btn {
+    background: #3b82f6;
+}
+
+.header button:last-child.logout-btn:hover {
+    background: #2563eb;
+}
+
+/* ================= Notifications ================= */
+.notifications {
+    margin: 12px 24px 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.notification {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+}
+
+/* ================= Main content ================= */
+.content {
+    flex: 1;
+    min-height: 0;
+    padding: 24px;
+    overflow-y: auto; /* asta rezolva “nu se mai vede header/butoane” */
+}
+
+/* Text default vizibil (fix pentru “You have no assigned devices.” etc) */
+.content p {
+    color: #1f2937;
+    font-size: 16px;
+}
+
+.error {
+    color: #dc2626;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+/* ================= Table section ================= */
+.device-section {
+    margin-bottom: 28px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+}
+
+th {
+    background: #f3f4f6;
+    font-weight: 700;
+    color: #111827;
+}
+
+.selected-row {
+    background-color: #e0f2fe;
+}
+
+.selected-row:hover {
+    background-color: #bfdbfe;
+}
+
+/* ================= Charts section ================= */
+.chart-section {
+    margin-top: 12px;
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 18px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+
+    max-width: 100%;
+    overflow-x: hidden; /* previne overflow orizontal */
+}
+
+.chart-controls {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    color: #111827;
+}
+
+.chart-controls label {
+    font-weight: 600;
+    color: #111827;
+}
+
+.chart-controls select,
+.chart-controls input[type="date"] {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    font-family: inherit;
+    background: #f9fafb;
+    color: #111827;
+}
+
+/* Grid responsive, dar cu limite sanatoase */
+.charts-wrapper {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    margin-top: 8px;
+    align-items: start;
+}
+
+/* Card cu limite clare ca sa nu “impinga” pagina */
+.chart-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+
+    /* limiteaza expandarea */
+    max-width: 100%;
+}
+
+.chart-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #111827;
+}
+
+/* Optional: daca vrei ca chart-urile sa stea “tight” si sa nu faca overflow */
+.recharts-responsive-container {
+    min-width: 0;
+}
